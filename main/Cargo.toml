@@ -1,0 +1,10 @@
+[package]
+name = "main"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy = "*"
+bevy_egui = "*"
+rapier3d = { version = "*", features = [ "simd-stable" ] }
+rapier3d-urdf = { version = "*", features = ["stl"] }
