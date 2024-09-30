@@ -2,9 +2,11 @@ use bevy::{
     prelude::*,
     render::mesh::{Indices, PrimitiveTopology, VertexAttributeValues},
 };
-use nalgebra::Vector3;
+use nalgebra::{Point3, Vector3};
 use rapier3d::prelude::*;
 use rapier3d_urdf::{UrdfLoaderOptions, UrdfMultibodyOptions, UrdfRobot};
+
+use crate::ik::RobotNova;
 
 pub fn robot_plugin(app: &mut App) {
     app.add_systems(Startup, robot_setup);
@@ -25,7 +27,7 @@ fn robot_setup(
         create_colliders_from_collision_shapes: false,
         make_roots_fixed: true,
         // Z-up to Y-up.
-        shift: Isometry::rotation(-Vector::x() * std::f32::consts::FRAC_PI_2),
+        // shift: Isometry::rotation(-Vector::x() * std::f32::consts::FRAC_PI_2),
         ..Default::default()
     };
     let (robot, _) =
@@ -45,10 +47,13 @@ fn robot_setup(
         .collect();
     commands.insert_resource(JointHandles { idx: joint_handles });
 
+    // spawn the solver
+    commands.insert_resource(RobotSolver(RobotNova::default()));
+
     // Spawn Meshes
     let material = materials.add(StandardMaterial {
         base_color: Color::WHITE,
-        metallic: 0.2,
+        metallic: 0.1,
         ..Default::default()
     });
     for (handle, collider) in physics_system.collider_set.iter() {
@@ -70,7 +75,10 @@ fn robot_setup(
 
 fn robot_update(
     physics_system: ResMut<PhysicsSystem>,
+    joint_handles: Res<JointHandles>,
     mut collider_transforms: Query<(&mut Transform, &ColliderId)>,
+    mut gizmos: Gizmos,
+    mut robot_solver: ResMut<RobotSolver>,
 ) {
     let physics_system = physics_system.into_inner();
     // wake up all bodies for manual motor setting
@@ -90,7 +98,33 @@ fn robot_update(
         let collider = physics_system.collider_set.get(collider_id.0).unwrap();
         *transform = isometry_to_transform(collider.position());
     }
+
+    // Draw axis
+    gizmos.axes(Transform::IDENTITY, 0.1);
+    let end_index = 5;
+    let (multibody_id, link_id) = joint_handles.idx[end_index];
+    let multibody = physics_system
+        .multibody_joint_set
+        .get_multibody(multibody_id)
+        .unwrap();
+    let link = multibody.link(link_id).unwrap();
+    let rigid_body = physics_system
+        .rigid_body_set
+        .get(link.rigid_body_handle())
+        .unwrap();
+    gizmos.axes(isometry_to_transform(rigid_body.position()), 0.1);
+
+
+    // solve the robot
+    let nova = &mut robot_solver.0;
+    nova.solve(
+        &rigid_body.rotation().to_rotation_matrix(),
+        rigid_body.translation(),
+    );
 }
+
+#[derive(Resource)]
+pub struct RobotSolver(pub RobotNova);
 
 #[derive(Resource)]
 pub struct JointHandles {
@@ -101,7 +135,6 @@ pub struct JointHandles {
 struct ColliderId(ColliderHandle);
 
 fn mesh_from_trimesh(trimesh: &TriMesh) -> Mesh {
-    use nalgebra::Point3;
     let vtx = trimesh.vertices();
     let idx = trimesh.indices();
     let mut normals: Vec<[f32; 3]> = vec![];

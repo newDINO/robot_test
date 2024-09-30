@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
 
 mod camera;
+mod ik;
 mod robot;
 mod ui;
 

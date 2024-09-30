@@ -1,0 +1,2 @@
+2024.9.30
+Find that thtea5[2] and [3] is not valid through getting theta6 from it, but havn't prove it.
