@@ -1,4 +1,5 @@
 use bevy::{
+    core::FrameCount,
     prelude::*,
     render::mesh::{Indices, PrimitiveTopology, VertexAttributeValues},
 };
@@ -79,6 +80,7 @@ fn robot_update(
     mut collider_transforms: Query<(&mut Transform, &ColliderId)>,
     mut gizmos: Gizmos,
     mut robot_solver: ResMut<RobotSolver>,
+    framecount: Res<FrameCount>,
 ) {
     let physics_system = physics_system.into_inner();
     // wake up all bodies for manual motor setting
@@ -114,13 +116,14 @@ fn robot_update(
         .unwrap();
     gizmos.axes(isometry_to_transform(rigid_body.position()), 0.1);
 
-
     // solve the robot
     let nova = &mut robot_solver.0;
-    nova.solve(
-        &rigid_body.rotation().to_rotation_matrix(),
-        rigid_body.translation(),
-    );
+    let end_rot = rigid_body.rotation().to_rotation_matrix();
+    let end_pos = rigid_body.translation();
+    nova.solve(&rigid_body.rotation(), end_pos);
+    if framecount.0 % 60 == 0 {
+        nova.solve_num(end_rot, *end_pos);
+    }
 }
 
 #[derive(Resource)]

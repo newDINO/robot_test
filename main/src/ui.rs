@@ -99,10 +99,20 @@ fn ui_system_update(
             };
             ui.collapsing("IK", |ui| {
                 let nova = &robot_solver.0;
-                ui.label(format_array("theta1", &nova.theta1));
-                ui.label(format_array("theta5", &nova.theta5));
-                ui.label(format_array("theta60", &nova.theta60));
-                ui.label(format_array("theta61", &nova.theta61));
+                ui.collapsing("Analytical:", |ui| {
+                    ui.label(format_array("theta1", &nova.theta1));
+                    ui.label(format_array("theta5", &nova.theta5));
+                    ui.label(format_array("cos_theta6", &nova.cos_theta6));
+                    ui.label(format_array("sin_theta6", &nova.sin_theta6));
+                    ui.label(format_array("ssum", &nova.ssum_theta6));
+                    ui.label(format_array("theta6", &nova.theta6));
+                    ui.label(format_matrix("t14_left", &nova.t14_left));
+                });
+                ui.collapsing("Particle Swarm:", |ui| {
+                    ui.label(format!("best cost: {}", nova.best_cost));
+                    ui.label(format!("best root: {:?}", nova.best_root));
+                    ui.label(nova.print_roots());
+                });
             });
         })
         .unwrap();
@@ -133,4 +143,20 @@ fn ui_system_update(
             }
         }
     }
+}
+
+fn format_matrix<R, C, S>(name: &str, m: &rapier3d::na::Matrix<f32, R, C, S>) -> String
+where
+R: rapier3d::na::Dim,
+C: rapier3d::na::Dim,
+S: rapier3d::na::RawStorage<f32, R, C>
+{
+    let mut result = name.to_owned();
+    for row in m.row_iter() {
+        result += "\n";
+        for v in row {
+            result += &format!("{:.3}, ", v);
+        }
+    }
+    result
 }

@@ -4,4 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-nalgebra = "*"
+nalgebra = "0.32"
+argmin = "*"
+argmin-math = { version = "*", features = ["nalgebra_v0_32"] }
