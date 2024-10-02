@@ -116,11 +116,28 @@ fn robot_update(
         .unwrap();
     gizmos.axes(isometry_to_transform(rigid_body.position()), 0.1);
 
-    // solve the robot
     let nova = &mut robot_solver.0;
+    // update transform
+    let mut thetas = [0.0; 6];
+    for i in 0..joint_handles.len() {
+        let joint = &joint_handles
+            .get_link(i, &mut physics_system.multibody_joint_set)
+            .joint
+            .data;
+        let axis = JointAxis::AngX;
+        let motor = &joint.motors[axis as usize];
+        thetas[i] = if i == 0 || i == 3 {
+            -motor.target_pos
+        } else {
+            motor.target_pos
+        };
+    }
+    nova.update_end_transform(&thetas);
+
+    // solve the robot
     let end_rot = rigid_body.rotation().to_rotation_matrix();
     let end_pos = rigid_body.translation();
-    nova.solve(&rigid_body.rotation(), end_pos);
+    nova.solve();
     if framecount.0 % 60 == 0 {
         nova.solve_num(end_rot, *end_pos);
     }
@@ -132,6 +149,40 @@ pub struct RobotSolver(pub RobotNova);
 #[derive(Resource)]
 pub struct JointHandles {
     pub idx: Vec<(MultibodyIndex, usize)>,
+}
+impl JointHandles {
+    pub fn len(&self) -> usize {
+        self.idx.len()
+    }
+    pub fn get_link_mut<'a>(
+        &self,
+        i: usize,
+        multibody_joint_set: &'a mut MultibodyJointSet,
+    ) -> &'a mut MultibodyLink {
+        let (multibody_id, link_id) = &self.idx[i];
+        let multibody = multibody_joint_set
+            .get_multibody_mut(*multibody_id)
+            .unwrap();
+        multibody.link_mut(*link_id).unwrap()
+    }
+    pub fn get_link<'a>(
+        &self,
+        i: usize,
+        multibody_joint_set: &'a MultibodyJointSet,
+    ) -> &'a MultibodyLink {
+        let (multibody_id, link_id) = &self.idx[i];
+        let multibody = multibody_joint_set.get_multibody(*multibody_id).unwrap();
+        multibody.link(*link_id).unwrap()
+    }
+    pub fn get_rigid<'a>(
+        &self,
+        i: usize,
+        multibody_joint_set: &MultibodyJointSet,
+        rigidbody_set: &'a RigidBodySet,
+    ) -> &'a RigidBody {
+        let link = self.get_link(i, multibody_joint_set);
+        rigidbody_set.get(link.rigid_body_handle()).unwrap()
+    }
 }
 
 #[derive(Component)]

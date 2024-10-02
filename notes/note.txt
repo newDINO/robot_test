@@ -1,2 +1,2 @@
-2024.9.30
-Find that thtea5[2] and [3] is not valid through getting theta6 from it, but havn't prove it.
+todo:
+1. use final euler angles to solve theta6 directly. But if so, why do we have 4 solutions from theta6 ?

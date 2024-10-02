@@ -50,12 +50,9 @@ fn ui_system_update(
                 ui.label(format!("{:?}", camera_transform));
             });
             ui.collapsing("Joints", |ui| {
-                for (multibody_id, link_id) in &joint_handles.idx {
-                    let multibody = physics_system
-                        .multibody_joint_set
-                        .get_multibody_mut(*multibody_id)
-                        .unwrap();
-                    let link = multibody.link_mut(*link_id).unwrap();
+                for i in 0..joint_handles.len() {
+                    let link = &mut joint_handles
+                        .get_link_mut(i, &mut physics_system.multibody_joint_set);
                     let joint = &mut link.joint.data;
                     let axis = JointAxis::AngX;
                     joint.motor_axes |= axis.into();
@@ -70,16 +67,12 @@ fn ui_system_update(
                 }
             });
             ui.collapsing("Joint Transforms", |ui| {
-                for (multibody_id, link_id) in &joint_handles.idx {
-                    let multibody = physics_system
-                        .multibody_joint_set
-                        .get_multibody_mut(*multibody_id)
-                        .unwrap();
-                    let link = multibody.link_mut(*link_id).unwrap();
-                    let rigid_body = physics_system
-                        .rigid_body_set
-                        .get(link.rigid_body_handle())
-                        .unwrap();
+                for i in 0..joint_handles.len() {
+                    let rigid_body = joint_handles.get_rigid(
+                        i,
+                        &physics_system.multibody_joint_set,
+                        &physics_system.rigid_body_set,
+                    );
                     ui.label(format!(
                         "position: {:?}, rotation: {:?}",
                         rigid_body.translation(),
@@ -90,7 +83,7 @@ fn ui_system_update(
             let format_array = |name: &str, array: &[f32]| {
                 let mut result = name.to_owned();
                 for i in 0..array.len() {
-                    if i % 4 == 0 {
+                    if i % 8 == 0 {
                         result += "\n"
                     }
                     result += &format!("{:.3}, ", array[i]);
@@ -99,14 +92,23 @@ fn ui_system_update(
             };
             ui.collapsing("IK", |ui| {
                 let nova = &robot_solver.0;
+                ui.collapsing("K", |ui| {
+                    let end_rigid = joint_handles.get_rigid(
+                        5,
+                        &physics_system.multibody_joint_set,
+                        &physics_system.rigid_body_set,
+                    );
+                    let end_rigid_t = end_rigid.position().to_homogeneous();
+                    ui.label(format_matrix("end rigid t", &end_rigid_t));
+                    ui.label(format_matrix("end transform", &nova.transform));
+                });
                 ui.collapsing("Analytical:", |ui| {
                     ui.label(format_array("theta1", &nova.theta1));
+                    ui.label(format_array("theta2", &nova.theta2));
+                    ui.label(format_array("theta3", &nova.theta3));
+                    ui.label(format_array("theta4", &nova.theta4));
                     ui.label(format_array("theta5", &nova.theta5));
-                    ui.label(format_array("cos_theta6", &nova.cos_theta6));
-                    ui.label(format_array("sin_theta6", &nova.sin_theta6));
-                    ui.label(format_array("ssum", &nova.ssum_theta6));
                     ui.label(format_array("theta6", &nova.theta6));
-                    ui.label(format_matrix("t14_left", &nova.t14_left));
                 });
                 ui.collapsing("Particle Swarm:", |ui| {
                     ui.label(format!("best cost: {}", nova.best_cost));
@@ -147,9 +149,9 @@ fn ui_system_update(
 
 fn format_matrix<R, C, S>(name: &str, m: &rapier3d::na::Matrix<f32, R, C, S>) -> String
 where
-R: rapier3d::na::Dim,
-C: rapier3d::na::Dim,
-S: rapier3d::na::RawStorage<f32, R, C>
+    R: rapier3d::na::Dim,
+    C: rapier3d::na::Dim,
+    S: rapier3d::na::RawStorage<f32, R, C>,
 {
     let mut result = name.to_owned();
     for row in m.row_iter() {

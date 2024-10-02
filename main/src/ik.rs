@@ -5,7 +5,7 @@ use argmin::{
     solver::particleswarm::ParticleSwarm,
 };
 use rapier3d::{
-    na::{matrix, Isometry3, Matrix4, Rotation, Translation3, UnitQuaternion, Vector3},
+    na::{matrix, Matrix4, Rotation, Vector3},
     prelude::nalgebra,
 };
 
@@ -19,14 +19,17 @@ pub struct RobotNova {
     pub d5: f32,
     pub d6: f32,
     pub limits: (Vec<f32>, Vec<f32>),
+    // kinematics
+    pub transform: Matrix4<f32>,
     // analytical solutions
     pub theta1: [f32; 2],
     pub theta5: [f32; 4],
-    pub sin_theta6: [f32; 4],
-    pub cos_theta6: [f32; 4],
-    pub ssum_theta6: [f32; 4],
     pub theta6: [f32; 4],
-    pub t14_left: Matrix4<f32>,
+    pub t14_left: [Matrix4<f32>; 4],
+    pub theta234: [f32; 4],
+    pub theta2: [f32; 8],
+    pub theta3: [f32; 8],
+    pub theta4: [f32; 8],
     // numerical solutions
     pub best_root: Vec<f32>,
     pub best_cost: f32,
@@ -38,22 +41,25 @@ impl Default for RobotNova {
         Self {
             a2: -0.4,
             a3: -0.33,
-            d1: -0.24,
+            d1: 0.24,
             d4: 0.135,
-            d5: -0.12,
+            d5: 0.12,
             d6: 0.088,
             limits: (
                 vec![-PI, -PI, -PI, -PI, -PI, -PI],
                 vec![PI, PI, PI, PI, PI, PI],
             ),
 
+            transform: Matrix4::identity(),
+
             theta1: [0.0; 2],
             theta5: [0.0; 4],
-            sin_theta6: [0.0; 4],
-            cos_theta6: [0.0; 4],
-            ssum_theta6: [0.0; 4],
             theta6: [0.0; 4],
-            t14_left: Matrix4::identity(),
+            t14_left: [Matrix4::identity(); 4],
+            theta234: [0.0; 4],
+            theta2: [0.0; 8],
+            theta3: [0.0; 8],
+            theta4: [0.0; 8],
 
             best_root: Vec::new(),
             best_cost: 0.0,
@@ -63,8 +69,19 @@ impl Default for RobotNova {
 }
 
 impl RobotNova {
-    pub fn solve(&mut self, rq: &UnitQuaternion<f32>, p: &Vector3<f32>) {
-        let r = rq.to_rotation_matrix();
+    pub fn update_end_transform(&mut self, thetas: &[f32]) {
+        let t01 = t_joint(thetas[0], 0.0, 0.0, self.d1);
+        let t12 = t_joint(thetas[1], FRAC_PI_2, 0.0, 0.0);
+        let t23 = t_joint(thetas[2], 0.0, self.a2, 0.0);
+        let t34 = t_joint(thetas[3], 0.0, self.a3, self.d4);
+        let t45 = t_joint(thetas[4], FRAC_PI_2, 0.0, self.d5);
+        let t56 = t_joint(thetas[5], -FRAC_PI_2, 0.0, self.d6);
+        self.transform = t01 * t12 * t23 * t34 * t45 * t56;
+    }
+    pub fn solve(&mut self) {
+        let epsilon = 1e-3;
+        let r = self.transform.fixed_view::<3, 3>(0, 0);
+        let p = self.transform.fixed_view::<3, 1>(0, 3);
         // theta1
         self.theta1 = solve_asbc(
             self.d6 * r[(0, 2)] - p.x,
@@ -81,68 +98,65 @@ impl RobotNova {
         self.theta5[3] = -cos_theta5_1.acos();
 
         // theta6
-        let mut theta6_cos = [0.0; 8];
         for i in 0..self.theta5.len() {
             let theta5 = self.theta5[i];
             let theta1 = self.theta1[i / 2];
             let cos_theta6 =
                 (-r[(0, 0)] * theta1.sin() + r[(1, 0)] * theta1.cos()) / (-theta5.sin());
-            self.cos_theta6[i] = cos_theta6;
-            let theta6 = cos_theta6.acos();
-            theta6_cos[i * 2] = theta6;
-            theta6_cos[i * 2 + 1] = -theta6;
-        }
-        let mut theta6_sin = [0.0; 8];
-        for i in 0..self.theta5.len() {
-            let theta5 = self.theta5[i];
-            let theta1 = self.theta1[i / 2];
             let sin_theta6 = (-r[(0, 1)] * theta1.sin() + r[(1, 1)] * theta1.cos()) / theta5.sin();
-            self.sin_theta6[i] = sin_theta6;
-            let theta6 = sin_theta6.asin();
-            theta6_sin[i * 2] = theta6;
-            theta6_sin[i * 2 + 1] = if theta6 > 0.0 {
-                PI - theta6
-            } else {
-                -PI - theta6
-            };
-        }
-        for i in 0..self.cos_theta6.len() {
-            self.ssum_theta6[i] = self.cos_theta6[i].powi(2) + self.sin_theta6[i].powi(2);
-        }
-        let epsilon = 0.001;
-        'outer: for i in 0..self.theta6.len() {
-            let base = i * 2;
-            for j in 0..2 {
-                let c = theta6_cos[base + j];
-                for k in 0..2 {
-                    let s = theta6_sin[base + k];
-                    if (c - s).abs() < epsilon {
-                        self.theta6[i] = c;
-                        continue 'outer;
-                    }
-                }
-            }
-            self.theta6[i] = f32::NAN;
+            self.theta6[i] = theta_from_cos_sin(cos_theta6, sin_theta6, epsilon);
         }
 
         // theta234
-        let t_matrix = Isometry3 {
-            translation: Translation3::from(*p),
-            rotation: *rq,
-        }
-        .to_matrix();
-        let get_t14_left = || -> Option<Matrix4<f32>> {
+        let t_matrix = self.transform;
+        let get_t14_left = |i| -> Option<Matrix4<f32>> {
             Some(
-                t_joint(self.theta1[0], 0.0, 0.0, self.d1).try_inverse()?
+                t_joint(self.theta1[i / 2], 0.0, 0.0, self.d1).try_inverse()?
                     * t_matrix
-                    * t_joint(self.theta6[0], -FRAC_PI_2, 0.0, self.d6).try_inverse()?
-                    * t_joint(self.theta5[0], FRAC_PI_2, 0.0, self.d5).try_inverse()?,
+                    * t_joint(self.theta6[i], -FRAC_PI_2, 0.0, self.d6).try_inverse()?
+                    * t_joint(self.theta5[i], FRAC_PI_2, 0.0, self.d5).try_inverse()?,
             )
         };
-        if let Some(t14_left) = get_t14_left() {
-            self.t14_left = t14_left;
-        } else {
-            self.t14_left = Matrix4::identity();
+        for i in 0..self.t14_left.len() {
+            if let Some(t14_left) = get_t14_left(i) {
+                self.t14_left[i] = t14_left;
+            } else {
+                self.t14_left[i].fill(f32::NAN);
+            }
+        }
+        for i in 0..self.t14_left.len() {
+            let cos234 = (self.t14_left[i][(0, 0)] + self.t14_left[i][(2, 1)]) * 0.5;
+            let sin234 = (self.t14_left[i][(2, 0)] - self.t14_left[i][(0, 1)]) * 0.5;
+            self.theta234[i] = theta_from_cos_sin(cos234, sin234, epsilon);
+        }
+
+        // theta2
+        for i in 0..self.t14_left.len() {
+            let px = self.t14_left[i][(0, 3)];
+            let pz = self.t14_left[i][(2, 3)];
+            let (theta2_0, theta2_1) = solve_asbc(
+                2.0 * self.a2 * pz,
+                2.0 * self.a2 * px,
+                self.a2 * self.a2 - self.a3 * self.a3 + px * px + pz * pz,
+            );
+            self.theta2[i * 2] = theta2_0;
+            self.theta2[i * 2 + 1] = theta2_1;
+        }
+
+        // theta3
+        for i in 0..self.theta2.len() {
+            let px = self.t14_left[i / 2][(0, 3)];
+            let pz = self.t14_left[i / 2][(2, 3)];
+            let cos_theta2 = self.theta2[i].cos();
+            let sin_theta2 = self.theta2[i].sin();
+            let cos_theta3 = (px * cos_theta2 + pz * sin_theta2 - self.a2) / self.a3;
+            let sin_theta3 = (-px * sin_theta2 + pz * cos_theta2) / self.a3;
+            self.theta3[i] = theta_from_cos_sin(cos_theta3, sin_theta3, epsilon);
+        }
+
+        // theta4
+        for i in 0..self.theta3.len() {
+            self.theta4[i] = self.theta234[i / 2] - self.theta2[i] - self.theta3[i];
         }
     }
     pub fn solve_num(&mut self, r: Rotation<f32, 3>, p: Vector3<f32>) {
@@ -200,12 +214,51 @@ impl RobotNova {
     }
 }
 
+fn theta_from_cos_sin(c: f32, s: f32, epsilon: f32) -> f32 {
+    let c0 = c.acos();
+    let c1 = -c0;
+    let s0 = s.asin();
+    let s1 = if s0 > 0.0 { PI - s0 } else { -PI - s0 };
+    if (c0 - s0).abs() < epsilon {
+        (c0 + s0) * 0.5
+    } else if (c0 - s1).abs() < epsilon {
+        (c0 + s1) * 0.5
+    } else if (c1 - s0).abs() < epsilon {
+        (c1 + s0) * 0.5
+    } else if (c1 - s1).abs() < epsilon {
+        (c1 + s1) * 0.5
+    } else {
+        f32::NAN
+    }
+}
+
 fn slice_difference(s1: &[f32], s2: &[f32]) -> f32 {
     let mut result: f32 = 0.0;
     for i in 0..s1.len() {
         result = result.max((s1[i] - s2[i]).abs())
     }
     result
+}
+
+// solutions for
+// a * sin(x) + b * cos(x) = c
+fn solve_asbc(a: f32, b: f32, c: f32) -> (f32, f32) {
+    let k1 = (a * a + b * b - c * c).sqrt();
+    let k2 = b + c;
+    let s1 = 2.0 * ((a - k1) / k2).atan();
+    let s2 = 2.0 * ((a + k1) / k2).atan();
+    // let s1 = b.atan2(-a) - c.atan2(k1);
+    // let s2 = b.atan2(-a) - c.atan2(-k1);
+    (s1, s2)
+}
+
+fn t_joint(theta: f32, alpha: f32, a: f32, d: f32) -> Matrix4<f32> {
+    matrix![
+        theta.cos(), -theta.sin(), 0.0, a;
+        theta.sin() * alpha.cos(), theta.cos() * alpha.cos(), -alpha.sin(), -alpha.sin() * d;
+        theta.sin() * alpha.sin(), theta.cos() * alpha.sin(), alpha.cos(), alpha.cos() * d;
+        0.0, 0.0, 0.0, 1.0
+    ]
 }
 
 struct RobotProblem {
@@ -220,7 +273,7 @@ struct RobotProblem {
 }
 
 impl RobotProblem {
-    fn end_transform(&self, thetas: &Vec<f32>) -> Matrix4<f32> {
+    fn end_transform(&self, thetas: &[f32]) -> Matrix4<f32> {
         let t01 = t_joint(thetas[0], 0.0, 0.0, self.d1);
         let t12 = t_joint(thetas[1], FRAC_PI_2, 0.0, 0.0);
         let t23 = t_joint(thetas[2], 0.0, self.a2, 0.0);
@@ -251,25 +304,4 @@ impl CostFunction for RobotProblem {
         }
         Ok(cost)
     }
-}
-
-// solutions for
-// a * sin(x) + b * cos(x) = c
-fn solve_asbc(a: f32, b: f32, c: f32) -> (f32, f32) {
-    let k1 = (a * a + b * b - c * c).sqrt();
-    let k2 = b + c;
-    let s1 = 2.0 * ((a - k1) / k2).atan();
-    let s2 = 2.0 * ((a + k1) / k2).atan();
-    // let s1 = b.atan2(-a) - c.atan2(k1);
-    // let s2 = b.atan2(-a) - c.atan2(-k1);
-    (s1, s2)
-}
-
-fn t_joint(theta: f32, alpha: f32, a: f32, d: f32) -> Matrix4<f32> {
-    matrix![
-        theta.cos(), -theta.sin(), 0.0, a;
-        theta.sin() * alpha.cos(), theta.cos() * alpha.cos(), -alpha.sin(), -alpha.sin() * d;
-        theta.sin() * alpha.sin(), theta.cos() * alpha.sin(), alpha.cos(), alpha.cos() * d;
-        0.0, 0.0, 0.0, 1.0
-    ]
 }
