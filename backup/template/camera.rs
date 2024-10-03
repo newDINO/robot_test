@@ -3,7 +3,7 @@ use bevy::{
     prelude::*,
 };
 
-use crate::ui::SystemState;
+use crate::SystemState;
 
 pub fn camera_plugin(app: &mut App) {
     app.add_systems(Startup, camera_setup);

@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use bevy_egui::EguiPlugin;
 
 mod camera;
+mod ik;
 mod robot;
 mod ui;
 
@@ -12,14 +13,24 @@ fn main() {
         ))
         .add_plugins(DefaultPlugins)
         .add_plugins(EguiPlugin)
-        .add_systems(Startup, scene_setup)
+        .add_systems(Startup, system_setup)
         .add_plugins(ui::ui_plugin)
         .add_plugins(camera::camera_plugin)
         .add_plugins(robot::robot_plugin)
         .run();
 }
 
-fn scene_setup(mut commands: Commands) {
+#[derive(Resource)]
+pub struct SystemState {
+    controlling_camera: bool,
+}
+
+fn system_setup(mut commands: Commands) {
+    let ui_system = SystemState {
+        controlling_camera: false,
+    };
+    commands.insert_resource(ui_system);
+
     // Simple Scene
     commands.spawn(PointLightBundle {
         point_light: PointLight {
