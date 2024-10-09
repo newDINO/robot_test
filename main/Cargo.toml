@@ -6,7 +6,6 @@ edition = "2021"
 [dependencies]
 bevy = "*"
 bevy_egui = "*"
-argmin = "*"
-argmin-math = "*"
+rand = { version = "*", features = ["small_rng"] }
 rapier3d = { version = "*", features = [ "simd-stable" ] }
 rapier3d-urdf = { version = "*", features = ["stl"] }

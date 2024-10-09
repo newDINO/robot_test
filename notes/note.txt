@@ -1,2 +1,2 @@
 todo:
-1. use final euler angles to solve theta6 directly. But if so, why do we have 4 solutions from theta6 ?
+1. test if free_cells and obstacles are accelerating.
