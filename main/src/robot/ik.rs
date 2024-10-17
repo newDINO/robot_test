@@ -29,20 +29,8 @@ use rapier3d::prelude::*;
 //     }
 // }
 
-pub fn solve_nova(
-    limits: &[(f32, f32)],
-    target: Matrix4<f32>,
-) -> Vec<[f32; 6]> {
-    solve(
-        -0.4,
-        -0.33,
-        0.24,
-        0.135,
-        0.12,
-        0.088,
-        limits,
-        target,
-    )
+pub fn solve_nova(limits: &[(f32, f32)], target: Matrix4<f32>) -> Vec<[f32; 6]> {
+    solve(-0.4, -0.33, 0.24, 0.135, 0.12, 0.088, limits, target)
 }
 
 pub fn solve(

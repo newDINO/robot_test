@@ -2,8 +2,8 @@ use std::collections::HashSet;
 
 use rapier3d::na::Vector6;
 
-use crate::robot::RobotSystem;
 use super::Graph;
+use crate::robot::RobotSystem;
 
 const DIM: u32 = 6;
 const SPAN: usize = 3;
@@ -12,7 +12,7 @@ fn offsets() -> [Vector6<i32>; N] {
     let mut result = [Vector6::zeros(); N];
     for i in 0..N {
         for e in 0..DIM {
-            result[i][e as usize] = i as i32 / SPAN.pow(e) as i32 % SPAN as i32;
+            result[i][e as usize] = i as i32 / SPAN.pow(e) as i32 % SPAN as i32 - 1;
         }
     }
     result
@@ -36,7 +36,9 @@ impl RobotGraph {
     pub fn build<'a>(&'a mut self, robot_system: &'a mut RobotSystem) -> RobotGraphRef<'a> {
         let step_size = self.step_size;
         RobotGraphRef {
-            robot_system, graph: self, step_size,
+            robot_system,
+            graph: self,
+            step_size,
         }
     }
 }
@@ -99,7 +101,7 @@ impl Iterator for NeighborIter<'_> {
         let offset = self.graph.offsets.get(self.index)?;
         self.index += 1;
         let result = self.center + offset;
-        
+
         if self.graph.free_cells.contains(&result) {
             return Some(result);
         }
@@ -108,7 +110,9 @@ impl Iterator for NeighborIter<'_> {
         }
 
         let real_coord = result.cast::<f32>() * self.step_size;
-        self.robot_system.displacements.copy_from_slice(real_coord.as_slice());
+        self.robot_system
+            .displacements
+            .copy_from_slice(real_coord.as_slice());
         self.robot_system.update_from_displacements();
         self.robot_system.detect_collision();
 

@@ -13,6 +13,7 @@ use crate::math::transform_to_matrix;
 use crate::robot;
 use crate::robot::astar;
 use crate::robot::astar::AStar;
+use crate::robot::path::ArmPath;
 use crate::robot::rtt::Rtt;
 use crate::robot::RobotSystem;
 
@@ -37,6 +38,11 @@ pub struct SystemState {
     astar: Option<AStar<Vector6<i32>>>,
     astar_graph: astar::RobotGraph,
     astar_auto_step: bool,
+
+    new_path_start: Vector6<f32>,
+    new_path_end: Vector6<f32>,
+    new_path_step_size: f32,
+    arm_path: ArmPath,
 }
 impl SystemState {
     fn new() -> Self {
@@ -51,6 +57,11 @@ impl SystemState {
             astar: None,
             astar_graph: astar::RobotGraph::new(0.01),
             astar_auto_step: false,
+
+            new_path_end: Vector6::zeros(),
+            new_path_start: Vector6::zeros(),
+            new_path_step_size: 0.01,
+            arm_path: ArmPath::new(),
         }
     }
 }
@@ -165,18 +176,47 @@ fn ui_system_update(
             if let Some(ref mut astar) = system_state.astar {
                 if ui.button("Step").clicked() {
                     let mut graph = system_state.astar_graph.build(robot_system);
-                    astar.step(
-                        &mut graph,
-                    );
+                    astar.step(&mut graph);
                 }
                 ui.checkbox(&mut system_state.astar_auto_step, "Auto step");
                 if system_state.astar_auto_step {
                     let mut graph = system_state.astar_graph.build(robot_system);
-                    astar.step(
-                        &mut graph,
-                    );
+                    astar.step(&mut graph);
                 }
                 ui.label(format!("finished: {}", astar.finished));
+            }
+        });
+        ui.collapsing("Path", |ui| {
+            ui.label("New Path");
+            ui.label(format_vector("Start", &system_state.new_path_start));
+            if ui.button("Set").clicked() {
+                system_state.new_path_start = Vector6::from(robot_system.displacements);
+            }
+            ui.label(format_vector("End", &system_state.new_path_end));
+            if ui.button("Set").clicked() {
+                system_state.new_path_end = Vector6::from(robot_system.displacements);
+            }
+
+            ui.add(egui::DragValue::new(&mut system_state.new_path_step_size).speed(0.01));
+            if ui.button("New").clicked() {
+                system_state.arm_path = ArmPath::from_to(
+                    system_state.new_path_start,
+                    system_state.new_path_end,
+                    system_state.new_path_step_size,
+                );
+            }
+            
+            let from_astar_button = egui::Button::new("From A*");
+            if ui.add_enabled(system_state.astar.is_some(), from_astar_button).clicked() {
+                system_state.arm_path = ArmPath::from_astar(system_state.astar.as_ref().unwrap(), system_state.astar_graph.step_size);
+            }
+
+            let slider = egui::Slider::new(
+                &mut system_state.arm_path.index,
+                0..=system_state.arm_path.points.len() - 1,
+            );
+            if ui.add(slider).changed() {
+                system_state.arm_path.update_robot(robot_system);
             }
         });
     };
@@ -213,3 +253,15 @@ fn ui_system_update(
 //     }
 //     result
 // }
+fn format_vector<R, C, S>(name: &str, v: &rapier3d::na::Matrix<f32, R, C, S>) -> String
+where
+    R: rapier3d::na::Dim,
+    C: rapier3d::na::Dim,
+    S: rapier3d::na::RawStorage<f32, R, C>,
+{
+    let mut result = name.to_owned();
+    for v in v.iter() {
+        result += &format!("{:.3}, ", v);
+    }
+    result
+}

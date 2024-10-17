@@ -1,8 +1,9 @@
 use std::sync::Mutex;
 
-pub mod ik;
-pub mod rtt;
 pub mod astar;
+pub mod ik;
+pub mod path;
+pub mod rtt;
 
 use bevy::{
     prelude::*,

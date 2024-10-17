@@ -1,13 +1,16 @@
-use std::{collections::{BinaryHeap, HashMap}, hash::Hash};
+use std::{
+    collections::{BinaryHeap, HashMap},
+    hash::Hash,
+};
 
 mod robot;
 pub use robot::*;
 
 pub struct AStar<T: Eq + Hash + Copy> {
     frontier: BinaryHeap<Ranked<T>>,
-    came_from: HashMap<T, Option<T>>,
+    pub came_from: HashMap<T, Option<T>>,
     cost_so_far: HashMap<T, f32>,
-    goal: T,
+    pub goal: T,
     pub finished: bool,
 }
 
@@ -21,10 +24,7 @@ impl<T: Eq + Hash + Copy> AStar<T> {
             finished: false,
         }
     }
-    pub fn step(
-        &mut self,
-        graph: &mut impl Graph<Element = T>,
-    ) {
+    pub fn step(&mut self, graph: &mut impl Graph<Element = T>) {
         if self.finished {
             return;
         }
@@ -53,7 +53,6 @@ impl<T: Eq + Hash + Copy> AStar<T> {
         }
     }
 }
-
 
 pub trait Graph {
     type Element;
