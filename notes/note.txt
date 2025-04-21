@@ -1,2 +1,0 @@
-todo:
-1. test if free_cells and obstacles are accelerating.
