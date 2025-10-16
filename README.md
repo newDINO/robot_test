@@ -1,6 +1,6 @@
 ## Setup
 1. install the Rust programming language toolchain.
-2. run `cargo run -r -p main`
+2. run `cargo run -p main`
 
 ## Todo
 1. physics engine description format and editor
