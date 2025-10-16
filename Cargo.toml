@@ -1,3 +1,7 @@
 [workspace]
 members = ["main", "regroup", "tests"]
 resolver = "2"
+
+[profile.dev]
+opt-level = 3
+debug = false

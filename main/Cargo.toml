@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = "*"
-bevy_egui = "*"
+bevy = "0.14"
+bevy_egui = "0.28"
 rand = { version = "*", features = ["small_rng"] }
-rapier3d = { version = "*", features = [ "simd-stable" ] }
-rapier3d-urdf = { version = "*", features = ["stl"] }
+rapier3d = { version = "0.22", features = [ "simd-stable" ] }
+rapier3d-urdf = { version = "0.3", features = ["stl"] }

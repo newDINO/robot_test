@@ -1,4 +1,5 @@
 use std::fmt::Write;
+use std::fs;
 
 use bevy::diagnostic::DiagnosticsStore;
 use bevy::diagnostic::FrameTimeDiagnosticsPlugin;
@@ -217,6 +218,13 @@ fn ui_system_update(
             );
             if ui.add(slider).changed() {
                 system_state.arm_path.update_robot(robot_system);
+            }
+            if ui.button("Save").clicked() {
+                let mut result = String::new();
+                for point in &system_state.arm_path.points {
+                    writeln!(&mut result, "{},{},{},{},{},{}", point[0], point[1], point[2], point[3], point[4], point[5]).unwrap();
+                }
+                fs::write("path.csv", result.as_bytes()).unwrap();
             }
         });
     };
